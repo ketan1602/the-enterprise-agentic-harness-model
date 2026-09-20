@@ -1,0 +1,27 @@
+model:
+  name: claude-sonnet-4-6
+  temperature: 0.1
+  max_tokens: 1024
+
+agent:
+  name: harness-foundations
+  version: "1.0.0"
+  owner: platform-team
+
+harness:
+  version: "1.0.0"
+  max_retry_attempts: 3
+  retry_strategy: exponential
+  retry_base_delay_seconds: 1.0
+  retry_max_delay_seconds: 30.0
+  retryable_errors:
+    - RateLimitError
+    - APITimeoutError
+    - APIConnectionError
+  audit_enabled: true
+  cost_tracking_enabled: true
+  input_price_per_m_tokens: 3.00
+  output_price_per_m_tokens: 15.00
+
+eval:
+  pass_threshold: 0.80

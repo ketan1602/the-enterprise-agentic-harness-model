@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metrics — Harness Foundations</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">Harness Foundations</a>
+  <div class="nav-links">
+    <a href="/">Overview</a><a href="/demo">Demo</a>
+    <a href="/metrics" class="active">Metrics</a><a href="/eval">Eval</a>
+  </div>
+</nav>
+<main class="container">
+  <div class="page-header"><h1>Measurements</h1>
+    <p class="text-muted">Before/after complexity analysis + harness effectiveness metrics.</p></div>
+  <div id="no-data" style="display:none">
+    <div class="alert alert-warning">No measurements yet. Run:
+      <code>python scripts/measure_complexity.py</code> then refresh.</div>
+  </div>
+  <div id="metrics-content" style="display:none">
+    <div class="alert alert-success" id="key-finding"></div>
+    <h2>LOC Comparison — Before vs. After Harness</h2>
+    <div id="loc-chart" style="margin-bottom:24px"></div>
+    <div class="grid-2">
+      <div><h2>Retry Effectiveness</h2><div id="retry-chart"></div></div>
+      <div><h2>Audit Completeness</h2><div id="audit-chart"></div></div>
+    </div>
+    <div class="card" style="margin-top:24px">
+      <div class="card-title">Raw Measurements</div>
+      <pre id="raw-data"></pre>
+    </div>
+  </div>
+</main>
+<script src="/static/app.js"></script>
+<script>
+fetch('/api/metrics').then(r=>r.json()).then(d=>{
+  if (d.no_data) { el('no-data').style.display='block'; return; }
+  el('metrics-content').style.display='block';
+  el('key-finding').textContent = d.key_finding;
+  el('loc-chart').innerHTML = d.charts.loc_comparison;
+  el('retry-chart').innerHTML = d.charts.retry;
+  el('audit-chart').innerHTML = d.charts.audit;
+  el('raw-data').textContent = JSON.stringify(d.data, null, 2);
+}).catch(()=>{ el('no-data').style.display='block'; });
+</script>
+</body>
+</html>

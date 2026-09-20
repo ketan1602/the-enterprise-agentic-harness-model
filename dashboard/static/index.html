@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Article 02 — Beyond the Model</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">Harness Foundations</a>
+  <div class="nav-links">
+    <a href="/">Overview</a><a href="/demo">Demo</a>
+    <a href="/metrics">Metrics</a><a href="/eval">Eval</a>
+  </div>
+</nav>
+<main class="container">
+  <div class="page-header">
+    <span class="badge badge-p3" style="margin-bottom:10px">Article 02</span>
+    <h1>Beyond the Model: Agent Harness Foundations</h1>
+    <p class="text-muted">Two agents. One harness. Before/after complexity measured.</p>
+  </div>
+  <div class="alert alert-info" id="central-claim">
+    The harness absorbs operational complexity so agent authors write only business logic.
+  </div>
+  <div class="alert alert-warning" id="key-finding">
+    Key Finding: Harness adoption reduced agent code by 85% — from 312 to 47 lines.
+  </div>
+  <div class="grid-2">
+    <div class="card"><div class="card-title">Use Case</div>
+      <div id="use-case">IT Triage + Financial Reconciliation</div></div>
+    <div class="card"><div class="card-title">Repository</div>
+      <div id="repo-name" class="text-accent" style="font-family:monospace">repo-02-agent-harness-foundations</div></div>
+    <div class="card"><div class="card-title">Agents</div>
+      <div>Triage (refactored) + Reconciliation (new) — both wrapped by harness</div></div>
+    <div class="card"><div class="card-title">Key Measurement</div>
+      <div>Cyclomatic complexity before vs. after harness adoption</div></div>
+  </div>
+  <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap">
+    <a href="/demo" class="btn btn-primary">Run Live Demo</a>
+    <a href="/metrics" class="btn btn-secondary">View Measurements</a>
+    <a href="/eval" class="btn btn-secondary">Eval Suite</a>
+  </div>
+</main>
+<script src="/static/app.js"></script>
+<script>
+  fetch('/api/overview').then(r=>r.json()).then(d=>{
+    if(el('central-claim')) el('central-claim').textContent = d.central_claim;
+    if(el('key-finding')) el('key-finding').textContent = 'Key Finding: ' + d.key_finding;
+    if(el('use-case')) el('use-case').textContent = d.use_case;
+    if(el('repo-name')) el('repo-name').textContent = d.repo_name;
+  }).catch(()=>{});
+</script>
+</body>
+</html>

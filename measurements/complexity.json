@@ -1,0 +1,10 @@
+{
+  "_note": "Run 'python scripts/measure_complexity.py' to generate actual measurements",
+  "original_agent_loc": 0,
+  "refactored_agent_loc": 0,
+  "harness_loc": 0,
+  "complexity_reduction_pct": 0,
+  "retry_effectiveness_pct": 0,
+  "audit_completeness_pct": 0,
+  "contract_violation_rate_pct": 0
+}

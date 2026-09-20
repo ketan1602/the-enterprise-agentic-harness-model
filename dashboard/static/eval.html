@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eval — Harness Foundations</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">Harness Foundations</a>
+  <div class="nav-links">
+    <a href="/">Overview</a><a href="/demo">Demo</a>
+    <a href="/metrics">Metrics</a><a href="/eval" class="active">Eval</a>
+  </div>
+</nav>
+<main class="container">
+  <div class="page-header"><h1>Eval Suite</h1>
+    <p class="text-muted">Reconciliation agent eval: 10 batches, expected status checked.</p></div>
+  <div id="fixtures-table"></div>
+</main>
+<script src="/static/app.js"></script>
+<script>
+fetch('/api/eval/fixtures').then(r=>r.json()).then(cases=>{
+  const rows = cases.map(c=>`<tr>
+    <td><code>${c.input.batch_id}</code></td>
+    <td>${c.input.period}</td>
+    <td>$${c.input.gl_total?.toFixed(2)}</td>
+    <td>${c.expected.status}</td>
+    <td>${c.expected.requires_human_review ? 'Yes' : 'No'}</td>
+  </tr>`).join('');
+  el('fixtures-table').innerHTML = `<div class="card">
+    <h3>${cases.length} eval fixtures</h3>
+    <table><thead><tr><th>Batch ID</th><th>Period</th><th>GL Total</th><th>Expected Status</th><th>Requires Review</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}).catch(()=>{});
+</script>
+</body>
+</html>
