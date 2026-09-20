@@ -3,9 +3,6 @@ from __future__ import annotations
 import json
 import os
 
-from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import HumanMessage, SystemMessage
-
 from agents.reconciliation.prompts import (
     ANALYZE_SYSTEM_PROMPT,
     ANALYZE_USER_TEMPLATE,
@@ -14,17 +11,37 @@ from agents.reconciliation.prompts import (
 )
 from agents.reconciliation.schemas import ReconState
 
+_DEFAULT_MODEL = "openai/gpt-oss-120b"
 
-def _llm() -> ChatAnthropic:
-    return ChatAnthropic(
-        model="claude-sonnet-4-6",
-        temperature=0.1,
-        max_tokens=1024,
-        api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
-    )
+
+def _get_model() -> str:
+    return os.environ.get("AIR_MODEL", _DEFAULT_MODEL)
+
+
+def _get_api_key() -> str:
+    key = os.environ.get("AIREFINERY_API_KEY", "").strip()
+    if not key:
+        raise OSError("AIREFINERY_API_KEY must be set (see .env.example)")
+    return key
+
+
+def _strip_markdown(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        parts = text.split("```")
+        if len(parts) >= 2:
+            inner = parts[1].strip()
+            if inner.startswith("json"):
+                inner = inner[4:].strip()
+            return inner
+    return text
 
 
 async def analyze_node(state: ReconState) -> dict:
+    """Analyze the reconciliation batch: compute status, discrepancy count, variance."""
+    from air import AsyncAIRefinery
+
+    client = AsyncAIRefinery(api_key=_get_api_key())
     user_content = ANALYZE_USER_TEMPLATE.format(
         period=state["period"],
         gl_record_count=state["gl_record_count"],
@@ -35,11 +52,15 @@ async def analyze_node(state: ReconState) -> dict:
         bank_total=state["bank_total"],
         sample_discrepancies=state["sample_discrepancies"],
     )
-    response = await _llm().ainvoke([
-        SystemMessage(content=ANALYZE_SYSTEM_PROMPT),
-        HumanMessage(content=user_content),
-    ])
-    data = json.loads(response.content.strip())
+    response = await client.chat.completions.create(
+        model=_get_model(),
+        messages=[
+            {"role": "system", "content": ANALYZE_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+        temperature=0.1,
+    )
+    data = json.loads(_strip_markdown(response.choices[0].message.content))
     return {
         "status": data["status"],
         "discrepancy_count": int(data["discrepancy_count"]),
@@ -50,6 +71,10 @@ async def analyze_node(state: ReconState) -> dict:
 
 
 async def recommend_node(state: ReconState) -> dict:
+    """Generate summary and recommended actions based on analysis."""
+    from air import AsyncAIRefinery
+
+    client = AsyncAIRefinery(api_key=_get_api_key())
     user_content = RECOMMEND_USER_TEMPLATE.format(
         status=state["status"],
         discrepancy_count=state["discrepancy_count"],
@@ -57,11 +82,15 @@ async def recommend_node(state: ReconState) -> dict:
         requires_human_review=state["requires_human_review"],
         analysis_notes=state.get("_analysis_notes", ""),
     )
-    response = await _llm().ainvoke([
-        SystemMessage(content=RECOMMEND_SYSTEM_PROMPT),
-        HumanMessage(content=user_content),
-    ])
-    data = json.loads(response.content.strip())
+    response = await client.chat.completions.create(
+        model=_get_model(),
+        messages=[
+            {"role": "system", "content": RECOMMEND_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+        temperature=0.1,
+    )
+    data = json.loads(_strip_markdown(response.choices[0].message.content))
     return {
         "summary": data["summary"],
         "recommended_actions": data["recommended_actions"],

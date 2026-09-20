@@ -1,4 +1,4 @@
-"""Triage agent tests — all LLM calls mocked."""
+"""Triage agent tests — all LLM calls mocked, zero API calls."""
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -39,63 +39,68 @@ def test_triage_output_schema_valid():
 def test_triage_output_confidence_bounds():
     with pytest.raises(ValueError):
         TriageOutput(
-            ticket_id="X",
-            severity=Severity.P3,
-            affected_system="A",
-            routing_queue="general",
-            confidence=1.5,
-            classification_reasoning="x",
-            draft_subject="x",
-            draft_body="x",
-            estimated_resolution_hours=1,
+            ticket_id="X", severity=Severity.P3, affected_system="A",
+            routing_queue="general", confidence=1.5, classification_reasoning="x",
+            draft_subject="x", draft_body="x", estimated_resolution_hours=1,
         )
 
 
 def test_build_triage_harness_returns_harness():
     h = build_triage_harness()
-    assert h is not None and h.run_count == 0
+    assert h is not None
+    assert h.run_count == 0
 
 
 @pytest.mark.asyncio
-async def test_classify_node_parses_llm_response():
+async def test_classify_node_parses_llm_response(monkeypatch):
+    monkeypatch.setenv("AIREFINERY_API_KEY", "test-key")
     from agents.triage.nodes import classify_node
-    mock_resp = MagicMock()
-    mock_resp.content = (
+
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = (
         '{"severity":"P2","affected_system":"VPN","routing_queue":"infrastructure",'
-        '"confidence":0.9,"classification_reasoning":"VPN issue."}'
+        '"confidence":0.9,"classification_reasoning":"VPN connectivity issue."}'
     )
     state: AgentState = {
-        "ticket_id": "TKT-001", "subject": "VPN", "body": "down", "reporter_email": "x@y.com",
-        "severity": None, "affected_system": None, "routing_queue": None, "confidence": None,
-        "classification_reasoning": None, "draft_subject": None, "draft_body": None,
-        "estimated_resolution_hours": None, "errors": [], "run_id": "test",
+        "ticket_id": "TKT-001", "subject": "VPN", "body": "down",
+        "reporter_email": "x@y.com", "severity": None, "affected_system": None,
+        "routing_queue": None, "confidence": None, "classification_reasoning": None,
+        "draft_subject": None, "draft_body": None, "estimated_resolution_hours": None,
+        "errors": [], "run_id": "test",
     }
-    with patch("agents.triage.nodes.ChatAnthropic") as M:
-        m = AsyncMock()
-        m.ainvoke.return_value = mock_resp
-        M.return_value = m
+    with patch("air.AsyncAIRefinery") as MockAIR:
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        MockAIR.return_value = mock_client
         result = await classify_node(state)
+
     assert result["severity"] == "P2"
     assert result["routing_queue"] == "infrastructure"
+    assert result["confidence"] == 0.9
 
 
 @pytest.mark.asyncio
-async def test_draft_node_parses_llm_response():
+async def test_draft_node_parses_llm_response(monkeypatch):
+    monkeypatch.setenv("AIREFINERY_API_KEY", "test-key")
     from agents.triage.nodes import draft_node
-    mock_resp = MagicMock()
-    mock_resp.content = (
+
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = (
         '{"draft_subject":"Re: VPN","draft_body":"We are investigating.","estimated_resolution_hours":4}'
     )
     state: AgentState = {
-        "ticket_id": "TKT-001", "subject": "VPN", "body": "down", "reporter_email": "x@y.com",
-        "severity": "P2", "affected_system": "VPN", "routing_queue": "infrastructure",
-        "confidence": 0.9, "classification_reasoning": "ok", "draft_subject": None,
-        "draft_body": None, "estimated_resolution_hours": None, "errors": [], "run_id": "test",
+        "ticket_id": "TKT-001", "subject": "VPN", "body": "down",
+        "reporter_email": "x@y.com", "severity": "P2", "affected_system": "VPN",
+        "routing_queue": "infrastructure", "confidence": 0.9,
+        "classification_reasoning": "ok", "draft_subject": None,
+        "draft_body": None, "estimated_resolution_hours": None,
+        "errors": [], "run_id": "test",
     }
-    with patch("agents.triage.nodes.ChatAnthropic") as M:
-        m = AsyncMock()
-        m.ainvoke.return_value = mock_resp
-        M.return_value = m
+    with patch("air.AsyncAIRefinery") as MockAIR:
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        MockAIR.return_value = mock_client
         result = await draft_node(state)
+
     assert result["draft_subject"] == "Re: VPN"
     assert result["estimated_resolution_hours"] == 4
