@@ -1,155 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Demo — Harness Foundations</title>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo: the support scenario</title>
   <link rel="stylesheet" href="/static/styles.css">
-  <style>
-    .tabs { display:flex; gap:0; margin-bottom:20px; border-bottom:1px solid var(--border); }
-    .tab { padding:8px 20px; cursor:pointer; color:var(--muted); font-size:13px; border-bottom:2px solid transparent; }
-    .tab.active { color:var(--text); border-color:var(--accent); }
-    .tab-panel { display:none; } .tab-panel.active { display:block; }
-  </style>
 </head>
 <body>
-<nav class="nav">
-  <a class="nav-brand" href="/">Harness Foundations</a>
-  <div class="nav-links">
-    <a href="/">Overview</a><a href="/demo" class="active">Demo</a>
-    <a href="/metrics">Metrics</a><a href="/eval">Eval</a>
-  </div>
-</nav>
 <main class="container">
-  <div class="page-header">
-    <h1>Live Agent Demo</h1>
-    <p class="text-muted">Two agents powered by the same harness. Both show lifecycle, retry, cost tracking automatically.</p>
+  <div class="page-header"><h1>The support scenario</h1>
+    <p class="text-muted">A live model decides what the support agent does. The same case runs with
+    no controls (direct) and through the harness. This makes real model calls and needs
+    <code>LLM_API_KEY</code> and <code>LLM_BASE_URL</code> on the server.</p></div>
+  <div class="card">
+    <form id="form"><div class="form-group"><label for="case">Case</label>
+      <select id="case"></select></div>
+      <div class="form-group"><label><input type="checkbox" id="noknow" style="width:auto">
+        Withhold Knowledge on the harnessed path (the model cannot see the refund policy)</label></div>
+      <button type="button" class="btn btn-primary" id="run">Run case</button></form>
+    <p class="text-muted" id="task" style="margin-top:10px"></p>
   </div>
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('triage')">Triage Agent</div>
-    <div class="tab" onclick="switchTab('recon')">Reconciliation Agent</div>
-  </div>
-
-  <!-- Triage Tab -->
-  <div class="tab-panel active" id="panel-triage">
-    <div class="card">
-      <h3>IT Support Ticket</h3>
-      <form id="triage-form">
-        <div class="form-group"><label>Subject</label>
-          <input name="subject" value="VPN not connecting from home office" required></div>
-        <div class="form-group"><label>Body</label>
-          <textarea name="body" rows="4">Since this morning I cannot connect to the corporate VPN from my home office. Error code 619. I am working from home today and tomorrow.</textarea></div>
-        <button type="submit" class="btn btn-primary" id="triage-btn">Run Triage Agent</button>
-      </form>
-    </div>
-    <div id="triage-result"></div>
-  </div>
-
-  <!-- Reconciliation Tab -->
-  <div class="tab-panel" id="panel-recon">
-    <div class="card">
-      <h3>Financial Reconciliation Batch</h3>
-      <form id="recon-form">
-        <div class="grid-2">
-          <div class="form-group"><label>Batch ID</label><input name="batch_id" value="BATCH-2024-01"></div>
-          <div class="form-group"><label>Period</label><input name="period" value="2024-01"></div>
-          <div class="form-group"><label>GL Total ($)</label><input name="gl_total" type="number" step="0.01" value="125430.50"></div>
-          <div class="form-group"><label>Payment Total ($)</label><input name="payment_total" type="number" step="0.01" value="125180.25"></div>
-          <div class="form-group"><label>Bank Total ($)</label><input name="bank_total" type="number" step="0.01" value="125430.50"></div>
-          <div class="form-group"><label>GL Records</label><input name="gl_record_count" type="number" value="342"></div>
-          <div class="form-group"><label>Payment Records</label><input name="payment_record_count" type="number" value="339"></div>
-          <div class="form-group"><label>Bank Records</label><input name="bank_record_count" type="number" value="342"></div>
-        </div>
-        <button type="submit" class="btn btn-primary" id="recon-btn">Run Reconciliation Agent</button>
-      </form>
-    </div>
-    <div id="recon-result"></div>
-  </div>
+  <div id="note"></div>
+  <div class="grid-2"><div id="out-direct"></div><div id="out-harnessed"></div></div>
 </main>
 <script src="/static/app.js"></script>
 <script>
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['triage','recon'][i]===name));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('panel-' + name).classList.add('active');
+const CONTROL = {};
+const BADGE = {completed: 'badge-success', blocked: 'badge-error', terminated: 'badge-warning',
+               awaiting_approval: 'badge-p3', failed: 'badge-error'};
+let cases = [];
+function render(title, r) {
+  const effects = r.effects.length ? r.effects.map(e => `<div><code>${esc(e.tool)}</code> ${esc(JSON.stringify(e))}</div>`).join('') : '<span class="text-muted">no side effects</span>';
+  const verdict = r.violated ? '<span class="badge badge-error">control violated</span>' : '<span class="badge badge-success">no violation</span>';
+  const events = (r.events || []).map(e => `<span class="chip">${esc(e)}</span>`).join('');
+  const decided = r.decision ? `<p style="margin-top:8px"><strong>Decision:</strong> <code>${esc(r.decision.tool)}</code> ${esc(JSON.stringify(r.decision.arguments))}</p>` : '<p class="text-muted" style="margin-top:8px">The model was never consulted.</p>';
+  return `<div class="card"><div class="card-title">${title}</div>
+    <p><span class="badge ${BADGE[r.status] || 'badge-neutral'}">${esc(r.status)}</span> ${verdict}</p>
+    ${r.reason ? `<p style="margin-top:8px"><strong>Reason:</strong> ${esc(r.reason)}</p>` : ''}${decided}
+    ${r.human ? `<p style="margin-top:8px"><strong>Human:</strong> <code>${esc(r.human.approver)}</code> ${r.human.approve ? 'approved' : 'rejected'} the paused run, result <code>${esc(r.human.outcome)}</code></p>` : ''}
+    <div style="margin-top:8px"><strong>Side effects</strong><br>${effects}</div>
+    ${events ? `<div style="margin-top:8px"><strong>Trace</strong><br>${events}</div>` : ''}</div>`;
 }
-
-function renderHarnessMeta(json) {
-  return `<div class="card"><div class="card-title">Harness Metadata</div>
-    <div class="stat-grid">
-      <div><span class="text-muted">Run ID</span><br><code>${json.run_id}</code></div>
-      <div><span class="text-muted">Duration</span><br>${json.duration_ms}ms</div>
-      <div><span class="text-muted">Cost</span><br>$${(json.cost_usd||0).toFixed(5)}</div>
-      <div><span class="text-muted">Tokens</span><br>${json.token_usage?.total_tokens ?? 'n/a'}</div>
-    </div></div>`;
+function showTask() {
+  const c = cases.find(x => x.id === el('case').value);
+  el('task').textContent = c ? `Customer: ${c.utterance} (expected: ${c.expected})` : '';
 }
-
-// Triage form
-document.getElementById('triage-form').addEventListener('submit', async e => {
-  e.preventDefault();
-  const btn = document.getElementById('triage-btn');
-  btn.disabled = true; btn.textContent = 'Running…';
-  document.getElementById('triage-result').innerHTML = '<p class="loading">Invoking triage agent…</p>';
-  const data = new FormData(e.target);
-  data.append('ticket_id', 'TKT-DEMO'); data.append('reporter_email', 'user@company.com');
-  try {
-    const resp = await fetch('/api/demo/triage', {method:'POST', body:data});
-    const json = await resp.json();
-    if (json.success && json.output) {
-      const o = json.output;
-      const sev = o.severity.toLowerCase();
-      document.getElementById('triage-result').innerHTML = `
-        <div class="card"><h3>Classification</h3>
-          <div style="display:flex;gap:8px;margin-bottom:12px">
-            <span class="badge badge-${sev}">${o.severity}</span>
-            <span class="badge" style="background:var(--border)">${o.routing_queue}</span>
-          </div>
-          <p><strong>Confidence:</strong> ${(o.confidence*100).toFixed(0)}%</p>
-          <p style="margin-top:6px">${o.classification_reasoning}</p></div>
-        <div class="card"><h3>Draft Response</h3>
-          <p><strong>${o.draft_subject}</strong></p>
-          <p style="margin-top:8px">${o.draft_body}</p>
-          <p class="text-muted" style="margin-top:8px">Est. resolution: ${o.estimated_resolution_hours}h</p></div>
-        ${renderHarnessMeta(json)}`;
-    } else {
-      document.getElementById('triage-result').innerHTML = `<div class="alert alert-error">Error: ${json.error||'Unknown'}</div>`;
-    }
-  } catch(err) {
-    document.getElementById('triage-result').innerHTML = `<div class="alert alert-error">Request failed: ${err.message}</div>`;
-  } finally { btn.disabled=false; btn.textContent='Run Triage Agent'; }
+getJSON('/api/demo/cases').then(list => {
+  cases = list;
+  list.forEach(c => { CONTROL[c.id] = c.control; });
+  const groups = {};
+  list.forEach(c => (groups[c.category] ||= []).push(c));
+  el('case').innerHTML = Object.entries(groups).map(([cat, items]) =>
+    `<optgroup label="${esc(cat)}">${items.map(c => `<option value="${esc(c.id)}">${esc(c.id)}</option>`).join('')}</optgroup>`).join('');
+  showTask();
 });
-
-// Reconciliation form
-document.getElementById('recon-form').addEventListener('submit', async e => {
-  e.preventDefault();
-  const btn = document.getElementById('recon-btn');
-  btn.disabled=true; btn.textContent='Running…';
-  document.getElementById('recon-result').innerHTML = '<p class="loading">Invoking reconciliation agent…</p>';
-  const data = new FormData(e.target);
-  try {
-    const resp = await fetch('/api/demo/reconciliation', {method:'POST', body:data});
-    const json = await resp.json();
-    if (json.success && json.output) {
-      const o = json.output;
-      const statusColor = {clean:'success',discrepancies_found:'warning',requires_review:'error'}[o.status]||'p3';
-      document.getElementById('recon-result').innerHTML = `
-        <div class="card"><h3>Reconciliation Result</h3>
-          <span class="badge badge-${statusColor}" style="margin-bottom:12px;display:inline-block">${o.status}</span>
-          <div class="stat-grid" style="margin-top:12px">
-            <div><span class="text-muted">Discrepancies</span><br>${o.discrepancy_count}</div>
-            <div><span class="text-muted">Total Variance</span><br>$${o.total_variance?.toFixed(2)}</div>
-            <div><span class="text-muted">Human Review</span><br>${o.requires_human_review?'Required':'Not required'}</div>
-          </div>
-          <p style="margin-top:12px">${o.summary}</p></div>
-        <div class="card"><h3>Recommended Actions</h3>
-          <ul style="padding-left:18px">${(o.recommended_actions||[]).map(a=>`<li>${a}</li>`).join('')}</ul></div>
-        ${renderHarnessMeta(json)}`;
-    } else {
-      document.getElementById('recon-result').innerHTML = `<div class="alert alert-error">Error: ${json.error||'Unknown'}</div>`;
-    }
-  } catch(err) {
-    document.getElementById('recon-result').innerHTML = `<div class="alert alert-error">Request failed: ${err.message}</div>`;
-  } finally { btn.disabled=false; btn.textContent='Run Reconciliation Agent'; }
+el('case').addEventListener('change', showTask);
+el('run').addEventListener('click', async () => {
+  el('run').disabled = true; el('run').textContent = 'Running (live model)…';
+  const r = await postJSON('/api/demo/run', {case_id: el('case').value, knowledge: !el('noknow').checked});
+  if (r.detail) {
+    el('note').innerHTML = `<div class="alert alert-error">${esc(r.detail)}</div>`;
+    el('out-direct').innerHTML = ''; el('out-harnessed').innerHTML = '';
+  } else {
+    const why = r.paired ? 'The harness judged the same real decision the model made on the direct path.'
+      : (CONTROL[r.case] === 'downstream'
+        ? 'The direct path produced no decision, so the two paths could not be paired and each asked the model for itself.'
+        : 'Each path asked the model for itself, because this control changes what the model sees.');
+    el('note').innerHTML = `<div class="alert alert-info">Model: <code>${esc(r.model)}</code>. ${why}</div>`;
+    el('out-direct').innerHTML = render('Direct path', r.direct);
+    el('out-harnessed').innerHTML = render('Harnessed path', r.harnessed);
+  }
+  el('run').disabled = false; el('run').textContent = 'Run case';
 });
 </script>
 </body>

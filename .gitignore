@@ -11,3 +11,7 @@ dist/
 *.egg
 build/
 .DS_Store
+
+
+# Working docs, kept local
+docs/

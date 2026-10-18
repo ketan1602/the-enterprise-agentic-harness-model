@@ -201,3 +201,13 @@ h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
 .mt-16 { margin-top: 16px; }
 .mb-16 { margin-bottom: 16px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* ENG-05 additions */
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+.cap { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.cap:last-child { border-bottom: none; }
+.chip { display: inline-block; padding: 1px 8px; margin: 2px 4px 2px 0; border-radius: 10px;
+        font-size: 11px; background: var(--border); }
+.badge-warning { background: var(--warning); color: #0f1117; }
+.badge-neutral { background: var(--muted); color: #fff; }
+.loop { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }

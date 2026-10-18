@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-10-18T05:07:07+00:00",
+  "python": "3.14.0",
+  "machine": "arm64",
+  "overhead": {
+    "runs": 15,
+    "model": "openai/gpt-oss-120b",
+    "direct": {
+      "median_us": 112.0,
+      "p95_us": 174.1
+    },
+    "harnessed": {
+      "median_us": 676.7,
+      "p95_us": 967.2
+    },
+    "added_median_us": 564.7
+  },
+  "equivalence": {
+    "cases": 16,
+    "decisions_replayed": 16,
+    "identical_outcomes": 16
+  },
+  "limits": [
+    "Overhead excludes the model call and the network. It includes the tool, the backend and the in-memory capabilities, so it excludes database and policy-service latency.",
+    "A small number of live runs: read the median, treat the p95 as indicative.",
+    "Single machine, single process, no concurrency.",
+    "Equivalence replays one real decision per case; it shows the compositions agree on that decision, not on every decision a model could make."
+  ]
+}

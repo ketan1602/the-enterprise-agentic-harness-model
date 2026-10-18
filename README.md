@@ -1,184 +1,177 @@
-# Article 02 — Beyond the Model: Agent Harness Foundations
+# The Enterprise Agentic Harness Model
 
-Part of the [Beyond the Model](https://github.com/ketan1602) series — a Platform Engineering perspective on Agentic AI.
+**ENG-05 · Season 2: The Harness** · Part of the *Beyond the Model* series by
+[ketan1602](https://github.com/ketan1602).
 
-## What This Demonstrates
+Last week's article defined a harness and ran one through a direct-versus-harnessed experiment.
+This article asks the question that left open: a harness is not one thing, so **what are the
+types?** The answer here is an executable specification: ten capabilities in three planes, a
+contract for each, and conformance tests that decide whether an implementation behaves.
 
-Before/after complexity analysis: same triage agent, measured with and without harness. Plus a second agent (Financial Reconciliation) built from scratch using the harness — showing the pattern generalises across use cases.
+```text
+Runtime plane    Execution · Knowledge · Context · Memory · Tools · Orchestration
+Control plane    Policy & Governance
+Assurance plane  Observability · Evaluation · Learning
 
-**Key finding:** Agent code reduced by 85%. The harness absorbed all operational complexity.
+Prepare -> Execute -> Observe -> Evaluate -> Improve
+```
 
-## Quickstart
+Every number in this repo is produced by a script or a test and written to `measurements/`.
+None is typed into a page or a document.
+
+## Run it
+
+You need Python 3.11 or newer, SSH access to GitHub (the `agent-harness-core` dependency is a
+private repo, pinned to its `main` branch; check with
+`ssh -T git@github.com`), and an API key and base URL for
+any OpenAI-compatible chat endpoint for the live steps.
+
+### 1. Install
 
 ```bash
-git clone https://github.com/ketan1602/repo-02-agent-harness-foundations
-cd repo-02-agent-harness-foundations
+git clone git@github.com:ketan1602/the-enterprise-agentic-harness-model.git
+cd the-enterprise-agentic-harness-model
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env   # add your AIREFINERY_API_KEY
-uvicorn dashboard.app:app --reload
-# Open http://localhost:8000
 ```
 
-## LLM Backend
-
-Uses [AI Refinery SDK](https://sdk.airefinery.accenture.com/distiller/model_catalog/) (`airefinery-sdk`).
-Model is selected at runtime via `AIR_MODEL` env var (default: `openai/gpt-oss-120b`).
-
-```python
-from air import AsyncAIRefinery
-client = AsyncAIRefinery(api_key=os.environ["AIREFINERY_API_KEY"])
-response = await client.chat.completions.create(
-    model=os.environ.get("AIR_MODEL", "openai/gpt-oss-120b"),
-    messages=[{"role": "system", "content": SYSTEM_PROMPT}, ...],
-    temperature=0.1,
-)
-```
-
-## Framework Architecture
-
-### Design Patterns Used
-
-This repo implements four interlocking patterns from `agent-harness-core`:
-
-| Pattern | Component | Purpose |
-|---|---|---|
-| **Wrapper / Decorator** | `AgentHarness` | Wraps any `CompiledGraph` — adds all operational capabilities without touching graph code |
-| **Strategy** | `RetryPolicy` | Dispatch table `{"linear": fn, "exponential": fn, "jittered": fn}` — swap strategies via config, no `if/elif` |
-| **State Machine** | `LifecycleManager` | `VALID_TRANSITIONS` dict as sole authority — `INITIALISING → READY → RUNNING → COMPLETED/FAILED` |
-| **Facade** | `AgentHarness.run()` | Single entry point hides lifecycle, retry, validation, audit, cost from callers |
-
-### Harness Lifecycle (per run)
-
-```
-validate_input()
-  → lifecycle.READY
-  → lifecycle.RUNNING
-  → graph.ainvoke(config={"callbacks": [metrics_cb]})
-  → cost.record(cb.prompt_tokens, cb.completion_tokens)
-  → validate_output()
-  → lifecycle.COMPLETED
-  → HarnessResult(success=True, ...)
-```
-
-On any exception: `lifecycle.FAILED` → `HarnessResult(success=False, error=..., ...)` — never raises.
-
-### Retry Strategy
-
-`RetryPolicy` uses an OCP-compliant dispatch table. Three strategies configurable via `config/config.yaml`:
-
-```
-linear:      delay = base_delay × attempt
-exponential: delay = base_delay × 2^attempt
-jittered:    delay = exponential + random(0, base_delay)
-```
-
-`RateLimitError`, `APITimeoutError`, `APIConnectionError` are retryable by default.
-`with_retry()` returns `(result, attempts_taken)` — the harness records `retry_attempts` in `HarnessResult`.
-
-### Cost Tracking
-
-`_HarnessMetricsCallback(BaseCallbackHandler)` hooks into LangChain's callback system.
-Injected via `config={"callbacks": [cb]}` in `graph.ainvoke()`.
-Captures `prompt_tokens` and `completion_tokens` from all LLM calls in the graph automatically.
-`CostTracker.record()` computes USD cost using configurable per-million-token prices.
-
-### Audit Trail
-
-`AuditEmitter` writes structured events with SHA256 content hashes:
-- `run_start` — input hash + schema name
-- `run_complete` — output hash + cost
-- `run_failed` — error type + message
-
-All events are returned in `HarnessResult.audit_events` and logged via structlog.
-
-## Agents and Scenarios
-
-### Agent 1: IT Service Desk Triage (`agents/triage/`)
-
-**Use case:** Incoming IT support tickets. Classify severity P1–P4, route to correct team, draft first response.
-
-**LangGraph:** `classify_node → draft_node → END`
-
-| Node | Calls LLM | Output fields |
-|---|---|---|
-| `classify_node` | Yes | severity, affected_system, routing_queue, confidence, classification_reasoning |
-| `draft_node` | Yes | draft_subject, draft_body, estimated_resolution_hours |
-
-**Input schema:** `TicketInput(ticket_id, subject, body, reporter_email, submitted_at)`
-**Output schema:** `TriageOutput(ticket_id, severity, affected_system, routing_queue, confidence, classification_reasoning, draft_subject, draft_body, estimated_resolution_hours)`
-
-**Before/After:** This is the "refactored" version. The original (repo-01's `agent/nodes.py`) included error handling, retry scaffolding, and operational boilerplate inline. Here, nodes contain only business logic — the harness handles everything else. Run `python scripts/measure_complexity.py` to generate the numbers.
-
-### Agent 2: Financial Reconciliation (`agents/reconciliation/`)
-
-**Use case:** End-of-period GL/payment/bank reconciliation. Classify batch status, identify discrepancies, recommend actions.
-
-**LangGraph:** `analyze_node → recommend_node → END`
-
-| Node | Calls LLM | Output fields |
-|---|---|---|
-| `analyze_node` | Yes | status, discrepancy_count, total_variance, requires_human_review |
-| `recommend_node` | Yes | summary, recommended_actions |
-
-**Input schema:** `ReconciliationInput(batch_id, period, gl_record_count, payment_record_count, bank_record_count, gl_total, payment_total, bank_total, sample_discrepancies)`
-
-**Output schema:** `ReconciliationOutput(batch_id, status, discrepancy_count, total_variance, requires_human_review, summary, recommended_actions)`
-
-**Status values:**
-- `clean` — all totals match within $0.01
-- `discrepancies_found` — variance ≤ $1000 and ≤ 5 items
-- `requires_review` — variance > $1000 or > 5 discrepancy items → triggers human escalation
-
-## Measurements
-
-### `scripts/measure_complexity.py`
-
-Uses `radon` to compute cyclomatic complexity and LOC of:
-- `../repo-01-agentic-enterprise-primer/agent/nodes.py` (original — with operational boilerplate)
-- `agents/triage/nodes.py` (refactored — business logic only)
-- `../agent-harness-core/src/harness_core/` (the harness itself)
-
-Writes `measurements/complexity.json`.
-
-### `scripts/inject_failures.py`
-
-Runs the triage agent 50 times with 30% simulated `RateLimitError` (monkey-patched).
-Records: total_runs, first_attempt_success, retry_recovered, ultimately_failed.
-Writes retry_effectiveness_pct to `measurements/complexity.json`.
+### 2. Prove the code works (no key, no network, no cost)
 
 ```bash
-python scripts/inject_failures.py --failure-rate 0.3
+pytest
 ```
 
-## Run Tests
+Everything passes. The tests stand in for the model (`tests/fake_llm.py`, which exists only
+there), so they prove the harness and the wiring, not how any real model behaves. Some tests
+report `xfailed`: those are **expected**, not errors. Each records a known gap in
+`agent-harness-core` and is written to fail; if a gap is ever fixed, that test starts failing
+loudly so the record gets updated.
 
 ```bash
-pytest tests/ -v   # 20 tests, zero API calls
+ruff check .
 ```
 
-## Run Measurements
+### 3. Add your key
 
 ```bash
-python scripts/measure_complexity.py
-python scripts/inject_failures.py
-# Then open http://localhost:8000/metrics
+cp .env.example .env        # then set LLM_API_KEY and LLM_BASE_URL in .env (never commit it)
 ```
 
-## File Structure
+`LLM_MODEL` picks the default model (`openai/gpt-oss-120b`); `--model` overrides it per run. `.env` is gitignored.
 
+### 4. Generate the evidence
+
+Start with the smoke test, which makes a few model calls:
+
+```bash
+python scripts/run_live_scenario.py --category unauthorized_tool
 ```
-repo-02-agent-harness-foundations/
-├── agents/
-│   ├── triage/          # IT triage: classify → draft
-│   └── reconciliation/  # Financial: analyze → recommend
-├── dashboard/
-│   ├── app.py           # FastAPI — 4 routes
-│   ├── charts.py        # SVG chart generators
-│   └── static/          # Vanilla JS + dark-theme CSS
-├── eval/fixtures/       # 10 reconciliation test cases
-├── measurements/        # complexity.json (generated)
-├── scripts/
-│   ├── measure_complexity.py
-│   └── inject_failures.py
-└── tests/               # 20 tests, all mocked
+
+Then the full set. Each model takes a few minutes; `--repeats 3` shows how much a model varies,
+and results from each model are merged into one file.
+
+```bash
+python scripts/run_live_scenario.py --model openai/gpt-oss-120b --model meta-llama/Llama-3.1-70B-Instruct --repeats 3
 ```
+
+```bash
+python scripts/run_conformance.py        # no key needed
+python scripts/run_benchmark.py          # overhead outside the model, adapter equivalence
+python scripts/run_improvement_cycle.py --model openai/gpt-oss-120b --model meta-llama/Llama-3.1-70B-Instruct
+```
+
+Each prints `wrote measurements/<name>.json`. Open those files: they are the numbers the article
+should quote. Results vary from run to run; quote the files you generated.
+
+### 5. See it
+
+```bash
+uvicorn dashboard.app:app --port 8000
+```
+
+Open <http://localhost:8000>. `/demo` and `/eval` make live model calls and read your `.env`.
+
+| Page | What to try |
+|---|---|
+| `/` Overview | The ten capabilities in three planes, and which were in last week's harness |
+| `/demo` | Pick `unauthorized_tool-1`: the model's own decision is run with no controls, then replayed through the harness. Then pick `policy_lookup-1`, run it, tick **Withhold Knowledge**, run again |
+| `/metrics` | Per-model results with and without the harness, conformance, the known `agent-harness-core` gaps, overhead, and the Evaluation and Learning result |
+| `/eval` | Run every case on both paths |
+
+Stop the server with Ctrl+C.
+
+### If something goes wrong
+
+| Symptom | Fix |
+|---|---|
+| `pip install` fails fetching `agent-harness-core` | SSH access to GitHub is missing or the key is not loaded: run `ssh -T git@github.com` |
+| `python` is too old | Use `python3.11` (or newer) to create the venv |
+| A script says `LLM_API_KEY` or `LLM_BASE_URL` `must be set` | Step 3: put both in `.env` |
+| A model returns a 404 | Your endpoint does not serve that model id. Use one it lists |
+| "every run failed in the model step" | Check the key, the model id and the network; nothing is written in that case |
+| Port 8000 is busy | `uvicorn dashboard.app:app --port 8001` |
+| `/metrics` says "No measurements yet" | Run the scripts in step 4 |
+
+## What's here
+
+The model itself lives in **`agent-harness-core`** (`harness_core.capabilities`, 1.4.0 and later),
+so every article's repo can import it. This repo is the article's evidence layer.
+
+| Path | Purpose |
+|---|---|
+| `scenario/` | The running support-agent scenario: backend, live model, 16 cases, the human-approval step |
+| `scripts/` | `run_conformance.py`, `run_live_scenario.py`, `run_benchmark.py`, `run_improvement_cycle.py`; all but conformance need a key |
+| `measurements/` | Generated evidence: `conformance.json`, `live_scenario.json`, `benchmark.json`, `improvement.json` |
+| `dashboard/` | Four pages that render those measurements and run the scenario live |
+| `tests/` | The scenario, the scripts and the dashboard, with no API calls |
+| `tests/fake_llm.py` | Test-only stand-in for the model client |
+| `docs/` | Model, conformance method, scenario, series roadmap, article outline |
+
+What `agent-harness-core` provides, and this repo imports: the ten-capability model, one async
+`Protocol` per capability, in-memory reference implementations, bridges onto the existing classes,
+`CapabilityHarness` (Tool pre-flight check, budgets, human-in-the-loop approval) and a conformance
+kit.
+
+## The kinds of evidence
+
+1. **Conformance.** The kit's checks run against the reference implementations and the bridges
+   onto the existing `agent-harness-core` classes. No model involved.
+2. **Live scenario, with and without the harness.** Every case runs on a live model with no
+   controls, then through the harness. Downstream controls (tool, budget, approval, suspension)
+   judge the *same real decision* the model made, replayed; upstream controls (context, memory,
+   knowledge) ask the model on each path. The report counts the harness's interventions per
+   scenario and per model.
+3. **Overhead.** The time a run takes outside the model call, with and without the harness.
+4. **Evaluation and Learning cycle.** Withhold Knowledge, let Evaluation catch the regression, let
+   Learning propose a change that needs an approver. Run on two models.
+
+Live results vary from run to run and come from a few models, so they are never presented as
+general.
+
+## agent-harness-core
+
+The repo pins the `main` branch of `agent-harness-core` (switch the pin to a release tag once one is cut). Bridges pass the library's behaviour through faithfully, so the
+conformance report shows where it conforms and where it does not. See
+[`docs/enterprise-agentic-harness-model.md`](docs/enterprise-agentic-harness-model.md).
+
+## Limits
+
+- The reference implementations are in-memory. Overhead excludes the model call, the network and
+  any real backend.
+- The 16 cases were authored to exercise each control. Preventing all of them shows each control
+  works, not that unanticipated failures are caught.
+- Live results come from five models and a few repeats; they vary run to run and say nothing about
+  other models. If a model resists an attack, that case tested nothing for it.
+- Pending approvals are in memory and do not expire; the dashboard does not offer interactive
+  approve and reject buttons.
+- Knowledge, Context and Memory have no article in this season.
+- No claim is made about productivity, lines of code or total cost.
+
+## Docs
+
+[Model](docs/enterprise-agentic-harness-model.md) ·
+[Conformance](docs/conformance-model.md) ·
+[Scenario](docs/scenario.md) ·
+[Series roadmap](docs/series-roadmap.md) ·
+[Article outline](docs/article-outline.md)

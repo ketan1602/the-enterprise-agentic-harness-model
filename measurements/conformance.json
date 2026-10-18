@@ -1,0 +1,222 @@
+{
+  "generated_at": "2026-10-18T05:07:06+00:00",
+  "python": "3.14.0",
+  "harness_core_version": "1.4.0",
+  "formula": "Capability Conformance = Passed Required Checks / Total Required Checks",
+  "capabilities": {
+    "execution": {
+      "name": "Execution",
+      "plane": "Runtime",
+      "implementations": {
+        "reference": {
+          "passed": 4,
+          "total": 4,
+          "gaps": []
+        },
+        "bridge": {
+          "passed": 4,
+          "total": 4,
+          "gaps": []
+        }
+      },
+      "no_adapter": null
+    },
+    "knowledge": {
+      "name": "Knowledge",
+      "plane": "Runtime",
+      "implementations": {
+        "reference": {
+          "passed": 3,
+          "total": 3,
+          "gaps": []
+        }
+      },
+      "no_adapter": "interface only: KnowledgeGraphBase; Null default, Neo4j needs a server"
+    },
+    "context": {
+      "name": "Context",
+      "plane": "Runtime",
+      "implementations": {
+        "reference": {
+          "passed": 7,
+          "total": 7,
+          "gaps": []
+        }
+      },
+      "no_adapter": "none: nothing in harness_core to bridge"
+    },
+    "memory": {
+      "name": "Memory",
+      "plane": "Runtime",
+      "implementations": {
+        "reference": {
+          "passed": 7,
+          "total": 7,
+          "gaps": []
+        }
+      },
+      "no_adapter": "interface only: EpisodicStoreBase; Null default, Qdrant needs a server"
+    },
+    "tools": {
+      "name": "Tools",
+      "plane": "Runtime",
+      "implementations": {
+        "reference": {
+          "passed": 14,
+          "total": 14,
+          "gaps": []
+        },
+        "bridge": {
+          "passed": 14,
+          "total": 14,
+          "gaps": []
+        }
+      },
+      "no_adapter": null
+    },
+    "orchestration": {
+      "name": "Orchestration",
+      "plane": "Runtime",
+      "implementations": {
+        "reference": {
+          "passed": 3,
+          "total": 3,
+          "gaps": []
+        }
+      },
+      "no_adapter": "interface only: CheckpointStoreBase; Null default, Postgres needs a server"
+    },
+    "governance": {
+      "name": "Policy & Governance",
+      "plane": "Control",
+      "implementations": {
+        "reference": {
+          "passed": 8,
+          "total": 8,
+          "gaps": []
+        },
+        "bridge": {
+          "passed": 2,
+          "total": 8,
+          "gaps": [
+            {
+              "test": "suspended_agent_denied",
+              "reason": "no agent suspension in harness_core"
+            },
+            {
+              "test": "budget_over_limit_denied",
+              "reason": "CostTracker records spend; it enforces no limit"
+            },
+            {
+              "test": "budget_within_limit_allowed",
+              "reason": "CostTracker records spend; it enforces no limit"
+            },
+            {
+              "test": "unauthorised_approver_rejected",
+              "reason": "approval is a graph signal plus a Postgres store"
+            },
+            {
+              "test": "authorised_approver_approved",
+              "reason": "approval is a graph signal plus a Postgres store"
+            },
+            {
+              "test": "lifecycle_state_reports_suspension",
+              "reason": "LifecycleManager tracks per-run state only"
+            }
+          ]
+        }
+      },
+      "no_adapter": null
+    },
+    "observability": {
+      "name": "Observability",
+      "plane": "Assurance",
+      "implementations": {
+        "reference": {
+          "passed": 3,
+          "total": 3,
+          "gaps": []
+        },
+        "bridge": {
+          "passed": 3,
+          "total": 3,
+          "gaps": []
+        }
+      },
+      "no_adapter": null
+    },
+    "evaluation": {
+      "name": "Evaluation",
+      "plane": "Assurance",
+      "implementations": {
+        "reference": {
+          "passed": 3,
+          "total": 3,
+          "gaps": []
+        },
+        "bridge": {
+          "passed": 3,
+          "total": 3,
+          "gaps": []
+        }
+      },
+      "no_adapter": null
+    },
+    "learning": {
+      "name": "Learning",
+      "plane": "Assurance",
+      "implementations": {
+        "reference": {
+          "passed": 3,
+          "total": 3,
+          "gaps": []
+        }
+      },
+      "no_adapter": "none: nothing in harness_core to bridge"
+    }
+  },
+  "planes": {
+    "Runtime": {
+      "reference": {
+        "passed": 38,
+        "total": 38,
+        "capabilities_tested": 6,
+        "capabilities_in_plane": 6
+      },
+      "bridge": {
+        "passed": 18,
+        "total": 18,
+        "capabilities_tested": 2,
+        "capabilities_in_plane": 6
+      }
+    },
+    "Control": {
+      "reference": {
+        "passed": 8,
+        "total": 8,
+        "capabilities_tested": 1,
+        "capabilities_in_plane": 1
+      },
+      "bridge": {
+        "passed": 2,
+        "total": 8,
+        "capabilities_tested": 1,
+        "capabilities_in_plane": 1
+      }
+    },
+    "Assurance": {
+      "reference": {
+        "passed": 9,
+        "total": 9,
+        "capabilities_tested": 3,
+        "capabilities_in_plane": 3
+      },
+      "bridge": {
+        "passed": 6,
+        "total": 6,
+        "capabilities_tested": 2,
+        "capabilities_in_plane": 3
+      }
+    }
+  }
+}

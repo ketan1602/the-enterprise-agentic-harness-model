@@ -2,49 +2,85 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Metrics — Harness Foundations</title>
+  <title>Measurements</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-<nav class="nav">
-  <a class="nav-brand" href="/">Harness Foundations</a>
-  <div class="nav-links">
-    <a href="/">Overview</a><a href="/demo">Demo</a>
-    <a href="/metrics" class="active">Metrics</a><a href="/eval">Eval</a>
-  </div>
-</nav>
 <main class="container">
   <div class="page-header"><h1>Measurements</h1>
-    <p class="text-muted">Before/after complexity analysis + harness effectiveness metrics.</p></div>
-  <div id="no-data" style="display:none">
-    <div class="alert alert-warning">No measurements yet. Run:
-      <code>python scripts/measure_complexity.py</code> then refresh.</div>
-  </div>
-  <div id="metrics-content" style="display:none">
-    <div class="alert alert-success" id="key-finding"></div>
-    <h2>LOC Comparison — Before vs. After Harness</h2>
-    <div id="loc-chart" style="margin-bottom:24px"></div>
-    <div class="grid-2">
-      <div><h2>Retry Effectiveness</h2><div id="retry-chart"></div></div>
-      <div><h2>Audit Completeness</h2><div id="audit-chart"></div></div>
-    </div>
-    <div class="card" style="margin-top:24px">
-      <div class="card-title">Raw Measurements</div>
-      <pre id="raw-data"></pre>
-    </div>
+    <p class="text-muted">Every number on this page is read from <code>measurements/*.json</code>,
+    written by the scripts. None is typed into the page.</p></div>
+  <div id="no-data" style="display:none"><div class="alert alert-warning">No measurements yet. Run:
+    <pre id="commands"></pre></div></div>
+  <div id="content" style="display:none">
+    <div class="alert alert-success" id="finding"></div>
+    <h2>Live models: control effectiveness</h2>
+    <div class="card"><table><thead><tr><th>Model</th><th>Runs</th><th>Evaluation passed</th>
+      <th>Real bad decisions</th><th>Stopped (same decision)</th><th>Model behaved</th>
+      <th>Direct violations</th><th>Harnessed violations</th><th>Model errors</th></tr></thead>
+      <tbody id="models"></tbody></table>
+      <p class="text-muted" style="margin-top:8px">A "real bad decision" is a case where the model's own
+      decision committed a violation on the direct path. "Model behaved" means it made a benign
+      decision there, so the harness had nothing to stop.</p></div>
+    <div id="by-model"></div>
+    <h2>Conformance by plane</h2><div id="planes"></div>
+    <h2 style="margin-top:24px">Conformance by capability</h2>
+    <div class="card"><table><thead><tr><th>Capability</th><th>Plane</th><th>Reference</th>
+      <th>agent-harness-core (bridges)</th></tr></thead><tbody id="caps"></tbody></table></div>
+    <h2>Known gaps in the agent-harness-core bridges</h2><div class="card" id="gaps"></div>
+    <h2>Overhead and equivalence</h2>
+    <div class="grid-2"><div id="overhead"></div><div id="effect"></div></div>
+    <div class="card" id="equivalence"></div>
+    <div id="improvement"></div>
+    <div class="card"><div class="card-title">What this does not show</div><ul id="limits" style="padding-left:18px"></ul></div>
+    <p class="text-muted" id="meta"></p>
   </div>
 </main>
 <script src="/static/app.js"></script>
 <script>
-fetch('/api/metrics').then(r=>r.json()).then(d=>{
-  if (d.no_data) { el('no-data').style.display='block'; return; }
-  el('metrics-content').style.display='block';
-  el('key-finding').textContent = d.key_finding;
-  el('loc-chart').innerHTML = d.charts.loc_comparison;
-  el('retry-chart').innerHTML = d.charts.retry;
-  el('audit-chart').innerHTML = d.charts.audit;
-  el('raw-data').textContent = JSON.stringify(d.data, null, 2);
-}).catch(()=>{ el('no-data').style.display='block'; });
+const cell = v => v ? `${v.passed}/${v.total}${v.gaps.length ? ` (${v.gaps.length} gaps)` : ''}` : '—';
+getJSON('/api/metrics').then(d => {
+  if (d.no_data) { el('no-data').style.display = 'block'; el('commands').textContent = d.commands.join('\n'); return; }
+  el('content').style.display = 'block';
+  el('finding').textContent = d.key_finding;
+  const models = Object.entries(d.live.models);
+  el('models').innerHTML = models.map(([name, m]) => { const s = m.summary; return `<tr><td><code>${esc(name)}</code></td>
+    <td>${s.runs}</td><td>${s.evaluation_passed}/${s.runs}</td><td>${s.downstream.real_bad_decisions}</td>
+    <td>${s.downstream.stopped_same_decision}</td><td>${s.downstream.benign_decisions}</td>
+    <td>${s.direct_violations}/${s.violation_runs}</td><td>${s.harnessed_violations}/${s.violation_runs}</td>
+    <td>${s.model_errors}</td></tr>`; }).join('');
+  el('by-model').innerHTML = models.map(([name, m]) => { const s = m.summary; const rows = s.by_case ? Object.entries(s.by_case) : Object.entries(s.by_category);
+    return `<div class="card"><div class="card-title">${esc(name)}: by scenario and what the harness did</div>
+    <p class="text-muted">Interventions: vetoed ${s.interventions.vetoed}, escalated to a human ${s.interventions.escalated_to_human ?? 0},
+    fields stripped ${s.interventions.fields_stripped}, retried ${s.interventions.retried}. Repeats: ${m.repeats}. ${esc(m.generated_at)}</p>
+    <table><thead><tr><th>Scenario</th><th>Runs</th><th>Passed</th><th>Direct violated</th><th>Harnessed violated</th><th>Vetoed</th><th>Model decided</th></tr></thead><tbody>
+    ${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v.runs}</td><td>${v.passed}</td><td>${v.direct_violated}</td><td>${v.harnessed_violated}</td>
+    <td>${v.vetoed ?? '—'}</td><td>${v.decisions ? Object.entries(v.decisions).map(([t, n]) => `<code>${esc(t)}</code> ×${n}`).join(' ') : '—'}</td></tr>`).join('')}
+    </tbody></table></div>`; }).join('');
+  el('planes').innerHTML = d.charts.planes.map(s => `<div style="margin-bottom:8px">${s}</div>`).join('');
+  const caps = Object.values(d.conformance.capabilities);
+  el('caps').innerHTML = caps.map(c => `<tr><td>${esc(c.name)}</td><td>${esc(c.plane)}</td>
+    <td>${cell(c.implementations.reference)}</td>
+    <td>${c.implementations.bridge ? cell(c.implementations.bridge) : `<span class="text-muted">${esc(c.no_adapter || 'no bridge')}</span>`}</td></tr>`).join('');
+  const gaps = caps.flatMap(c => ((c.implementations.bridge || {}).gaps || []).map(g => ({cap: c.name, ...g})));
+  el('gaps').innerHTML = gaps.map(g => `<div class="cap"><strong>${esc(g.cap)}</strong> · <code>${esc(g.test)}</code><br><span class="text-muted">${esc(g.reason)}</span></div>`).join('');
+  el('overhead').innerHTML = d.charts.overhead;
+  el('effect').innerHTML = d.charts.effectiveness;
+  const e = d.benchmark.equivalence;
+  el('equivalence').innerHTML = `<div class="card-title">Adapter equivalence</div>One real decision per case replayed through the reference and the agent-harness-core compositions: <strong>${e.identical_outcomes}/${e.decisions_replayed}</strong> identical outcomes (${e.cases} cases). Overhead measured over ${d.benchmark.overhead.runs} live runs per path with <code>${esc(d.benchmark.overhead.model)}</code>.`;
+  if (d.improvement) {
+    el('improvement').innerHTML = '<h2>Evaluation and Learning</h2>' + Object.entries(d.improvement.models).map(([name, m]) => { const i = m.reference; return `<div class="card">
+      <p><code>${esc(name)}</code>, Knowledge withheld: evaluation passed <strong>${i.degraded_passed}/${i.cases}</strong>
+      (baseline ${i.baseline_passed}/${i.cases}). Failed: ${i.failed_cases.map(c => `<code>${esc(c)}</code>`).join(', ') || 'none'}.
+      Control violations while degraded: <strong>${i.violations_while_degraded}</strong>.</p>
+      <p style="margin-top:8px">Learning proposed an improvement (<code>${esc(i.proposal_status)}</code>). Apply without approval:
+      <strong>${esc(i.apply_without_approval)}</strong> · unauthorised approver: <strong>${esc(i.apply_with_unauthorised_approver)}</strong> ·
+      authorised approver: <strong>${esc(i.apply_with_authorised_approver)}</strong>.</p></div>`; }).join('') +
+      `<p class="text-muted">${esc(d.improvement.note)}</p>`;
+  }
+  el('limits').innerHTML = [...d.live.limits, ...d.benchmark.limits].map(l => `<li>${esc(l)}</li>`).join('');
+  el('meta').textContent = `Conformance ${d.conformance.generated_at} · agent-harness-core ${d.conformance.harness_core_version} · benchmark ${d.benchmark.generated_at} · Python ${d.benchmark.python} ${d.benchmark.machine}`;
+});
 </script>
 </body>
 </html>
