@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "The Enterprise Agentic Harness Model: ten capabilities, three planes, contracts and conformance (ENG-05)"
 requires-python = ">=3.11"
 dependencies = [
-    "agent-harness-core @ git+ssh://git@github.com/ketan1602/agent-harness-core.git@main",
+    "agent-harness-core @ git+ssh://git@github.com/ketan1602/agent-harness-core.git@v1.4.0",
     "openai>=1.40",
     "truststore>=0.9.1",
     "pydantic>=2.0.0",

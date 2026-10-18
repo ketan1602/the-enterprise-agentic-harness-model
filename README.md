@@ -22,7 +22,7 @@ None is typed into a page or a document.
 ## Run it
 
 You need Python 3.11 or newer, SSH access to GitHub (the `agent-harness-core` dependency is a
-private repo, pinned to its `main` branch; check with
+private repo, pinned to its `v1.4.0` tag; check with
 `ssh -T git@github.com`), and an API key and base URL for
 any OpenAI-compatible chat endpoint for the live steps.
 
@@ -151,7 +151,7 @@ general.
 
 ## agent-harness-core
 
-The repo pins the `main` branch of `agent-harness-core` (switch the pin to a release tag once one is cut). Bridges pass the library's behaviour through faithfully, so the
+The repo pins the `v1.4.0` tag of `agent-harness-core`. Bridges pass the library's behaviour through faithfully, so the
 conformance report shows where it conforms and where it does not. See
 [`docs/enterprise-agentic-harness-model.md`](docs/enterprise-agentic-harness-model.md).
 
